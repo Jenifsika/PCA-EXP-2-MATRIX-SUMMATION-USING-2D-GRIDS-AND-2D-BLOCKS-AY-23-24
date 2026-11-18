@@ -1,9 +1,9 @@
 # PCA-EXP-2-Matrix-Summation-using-2D-Grids-and-2D-Blocks-AY-23-24
 
-<h3>AIM:</h3>
-<h3>ENTER YOUR NAME</h3>
-<h3>ENTER YOUR REGISTER NO</h3>
-<h3>EX. NO</h3>
+<h3>AIM:</h3> 
+<h3>ENTER YOUR NAME</h3> Annie Jenifsika A
+<h3>ENTER YOUR REGISTER NO</h3>212224230019
+<h3>EX. NO</h3>2
 <h3>DATE</h3>
 <h1> <align=center> MATRIX SUMMATION WITH A 2D GRID AND 2D BLOCKS </h3>
 i.  Use the file sumMatrixOnGPU-2D-grid-2D-block.cu
@@ -35,10 +35,160 @@ Google Colab with NVCC Compiler
 12.	Reset the device: Reset the device using cudaDeviceReset to ensure that all resources are cleaned up before the program exits.
 
 ## PROGRAM:
-TYPE YOUR CODE HERE
+```
+
+%%writefile matrix.cu
+#include <cuda_runtime.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/time.h>
+
+#define CHECK(call) \
+{ \
+    cudaError_t error = call; \
+    if (error != cudaSuccess) { \
+        printf("CUDA Error: %s\n", cudaGetErrorString(error)); \
+        exit(1); \
+    } \
+}
+
+double seconds()
+{
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+    return (double)tp.tv_sec + (double)tp.tv_usec * 1.e-6;
+}
+
+void initialData(int *ip, int size)
+{
+    for (int i = 0; i < size; i++)
+        ip[i] = rand() % 100;
+}
+
+void sumMatrixOnHost(int *A, int *B, int *C, int nx, int ny)
+{
+    for (int iy = 0; iy < ny; iy++)
+        for (int ix = 0; ix < nx; ix++)
+        {
+            int idx = iy * nx + ix;
+            C[idx] = A[idx] + B[idx];
+        }
+}
+
+__global__ void sumMatrixOnGPU2D(int *A, int *B, int *C,
+                                  int NX, int NY)
+{
+    unsigned int ix = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int iy = blockIdx.y * blockDim.y + threadIdx.y;
+
+    unsigned int idx = iy * NX + ix;
+
+    if (ix < NX && iy < NY)
+        C[idx] = A[idx] + B[idx];
+}
+
+void checkResult(int *hostRef, int *gpuRef, int N)
+{
+    for (int i = 0; i < N; i++)
+    {
+        if (hostRef[i] != gpuRef[i])
+        {
+            printf("Arrays do not match.\n");
+            return;
+        }
+    }
+    printf("Arrays match.\n");
+}
+
+int main()
+{
+    int dev = 0;
+    cudaDeviceProp deviceProp;
+
+    CHECK(cudaGetDeviceProperties(&deviceProp, dev));
+    CHECK(cudaSetDevice(dev));
+
+    printf("Using Device: %s\n", deviceProp.name);
+
+    int nx = 1 << 10;
+    int ny = 1 << 10;
+
+    int nxy = nx * ny;
+    int nBytes = nxy * sizeof(int);
+
+    printf("Matrix size: %d x %d\n", nx, ny);
+
+    int *h_A, *h_B, *hostRef, *gpuRef;
+
+    h_A = (int *)malloc(nBytes);
+    h_B = (int *)malloc(nBytes);
+    hostRef = (int *)malloc(nBytes);
+    gpuRef = (int *)malloc(nBytes);
+
+    if (!h_A || !h_B || !hostRef || !gpuRef)
+    {
+        printf("Host memory allocation failed\n");
+        return 1;
+    }
+
+    initialData(h_A, nxy);
+    initialData(h_B, nxy);
+
+    double start = seconds();
+    sumMatrixOnHost(h_A, h_B, hostRef, nx, ny);
+    printf("CPU time: %f sec\n", seconds() - start);
+
+    int *d_A, *d_B, *d_C;
+
+    CHECK(cudaMalloc((void **)&d_A, nBytes));
+    CHECK(cudaMalloc((void **)&d_B, nBytes));
+    CHECK(cudaMalloc((void **)&d_C, nBytes));
+
+    CHECK(cudaMemcpy(d_A, h_A, nBytes, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(d_B, h_B, nBytes, cudaMemcpyHostToDevice));
+
+    dim3 block(32, 32);
+    dim3 grid((nx + 31) / 32, (ny + 31) / 32);
+
+    start = seconds();
+
+    sumMatrixOnGPU2D<<<grid, block>>>(d_A, d_B, d_C, nx, ny);
+
+    CHECK(cudaGetLastError());
+    CHECK(cudaDeviceSynchronize());
+
+    printf("GPU time: %f sec\n", seconds() - start);
+
+    CHECK(cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost));
+
+    checkResult(hostRef, gpuRef, nxy);
+
+    CHECK(cudaFree(d_A));
+    CHECK(cudaFree(d_B));
+    CHECK(cudaFree(d_C));
+
+    free(h_A);
+    free(h_B);
+    free(hostRef);
+    free(gpuRef);
+
+    CHECK(cudaDeviceReset());
+
+    return 0;
+}
+```
+```
+!./matrix
+```
+
 
 ## OUTPUT:
-SHOW YOUR OUTPUT HERE
+
+<img width="242" height="52" alt="image" src="https://github.com/user-attachments/assets/6a5beb51-fde8-48c8-820f-a2e073b6689e" />
+<img width="406" height="122" alt="image" src="https://github.com/user-attachments/assets/017dfa03-4aa8-406e-a041-b9a7ba37c31c" />
+
+
 
 ## RESULT:
 The host took _________ seconds to complete it’s computation, while the GPU outperforms the host and completes the computation in ________ seconds. Therefore, float variables in the GPU will result in the best possible result. Thus, matrix summation using 2D grids and 2D blocks has been performed successfully.
